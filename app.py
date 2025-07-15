@@ -89,7 +89,8 @@ def index():
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.process_update(update)
+    # THIS IS THE FIX!
+    bot_app.update_queue.put_nowait(update)
     return 'ok'
 
 if __name__ == '__main__':
