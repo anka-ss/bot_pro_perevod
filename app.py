@@ -20,17 +20,22 @@ bot_app = Application.builder().token(TOKEN).build()
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["Отправить файл с переводом", "Написать админам"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "Выберите действие:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        reply_markup=reply_markup
     )
     return CHOOSING
 
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [["Отправить файл с переводом", "Написать админам"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
     text = update.message.text
     if text == "Отправить файл с переводом":
         await update.message.reply_text(
-            "Чтобы отправить свой файл, заполните мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут!"
+            "Чтобы отправить свой файл, заполните мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут!",
+            reply_markup=reply_markup
         )
         return CHOOSING
     elif text == "Написать админам":
@@ -40,7 +45,10 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return TYPING_TO_ADMIN
     else:
-        await update.message.reply_text("Пожалуйста, выберите одну из кнопок.")
+        await update.message.reply_text(
+            "Пожалуйста, выберите одну из кнопок.",
+            reply_markup=reply_markup
+        )
         return CHOOSING
 
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -49,8 +57,11 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from_chat_id=update.message.chat.id,
         message_id=update.message.message_id
     )
+    keyboard = [["Отправить файл с переводом", "Написать админам"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "Ваше сообщение отправлено администраторам! Спасибо ❤️"
+        "Ваше сообщение отправлено администраторам! Спасибо ❤️",
+        reply_markup=reply_markup
     )
     return CHOOSING
 
