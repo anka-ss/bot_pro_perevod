@@ -1,5 +1,4 @@
 import os
-from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ContextTypes,
@@ -12,12 +11,10 @@ ADMIN_CHAT_ID = 7367401537
 
 CHOOSING, TYPING_TO_ADMIN = range(2)
 
-flask_app = Flask(__name__)
-
 # Create PTB app
 bot_app = Application.builder().token(TOKEN).build()
 
-# Handlers
+# Start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["Отправить файл с переводом", "Написать админам"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -27,6 +24,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return CHOOSING
 
+# Choice handler
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["Отправить файл с переводом", "Написать админам"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -51,6 +49,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return CHOOSING
 
+# Forward to admin
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.forward_message(
         chat_id=ADMIN_CHAT_ID,
@@ -65,6 +64,7 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return CHOOSING
 
+# Cancel handler
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Диалог отменён. Напишите /start для начала.")
     return ConversationHandler.END
@@ -81,25 +81,16 @@ conv_handler = ConversationHandler(
 
 bot_app.add_handler(conv_handler)
 
-# Flask routes
-@flask_app.route('/')
-def index():
-    return 'Bot is running!'
-
-@flask_app.route('/webhook', methods=['POST'])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    # THIS IS THE FIX!
-    bot_app.update_queue.put_nowait(update)
-    return 'ok'
-
+# Entrypoint
 if __name__ == '__main__':
     import asyncio
 
     async def main():
         await bot_app.bot.delete_webhook()
-        await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-        print(f"Webhook установлен на {WEBHOOK_URL}/webhook")
+        await bot_app.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.environ.get('PORT', 5000)),
+            webhook_url=f"{WEBHOOK_URL}/webhook"
+        )
 
     asyncio.run(main())
-    flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
