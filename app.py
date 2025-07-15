@@ -1,10 +1,11 @@
 import os
 import logging
+import asyncio
 from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup, Bot
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ContextTypes,
-    ConversationHandler, filters, Dispatcher
+    ConversationHandler, filters
 )
 
 # Настройка логирования
@@ -18,6 +19,11 @@ app = Flask(__name__)
 TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 ADMIN_CHAT_ID = 7367401537
+
+if not TOKEN:
+    raise ValueError("BOT_TOKEN не найден в переменных окружения")
+if not WEBHOOK_URL:
+    raise ValueError("WEBHOOK_URL не найден в переменных окружения")
 
 # Состояния
 CHOOSING, TYPING_TO_ADMIN = range(2)
@@ -93,8 +99,18 @@ application.add_handler(conv_handler)
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        logger.info("Webhook received")
         update = Update.de_json(request.get_json(force=True), application.bot)
-        application.update_queue.put_nowait(update)
+        
+        # Запуск асинхронной обработки в новом event loop
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(application.process_update(update))
+            loop.close()
+        except Exception as e:
+            logger.error(f"Error processing update: {e}")
+            
         return 'OK'
     except Exception as e:
         logger.error(f"Error in webhook: {e}")
@@ -104,17 +120,29 @@ def webhook():
 def index():
     return 'Bot is running!'
 
-if __name__ == '__main__':
-    # Установка webhook
+@app.route('/setwebhook')
+def set_webhook():
     try:
-        import asyncio
         bot = Bot(TOKEN)
         webhook_url = f"{WEBHOOK_URL}/webhook"
-        asyncio.run(bot.set_webhook(url=webhook_url))
-        logger.info(f"Webhook set to {webhook_url}")
+        
+        # Установка webhook
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(bot.set_webhook(url=webhook_url))
+        loop.close()
+        
+        if result:
+            logger.info(f"Webhook set to {webhook_url}")
+            return f"Webhook successfully set to {webhook_url}"
+        else:
+            return "Failed to set webhook"
     except Exception as e:
         logger.error(f"Failed to set webhook: {e}")
-    
+        return f"Error setting webhook: {e}"
+
+if __name__ == '__main__':
     # Запуск Flask приложения
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting bot on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
