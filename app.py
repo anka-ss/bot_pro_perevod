@@ -2,33 +2,32 @@ import os
 from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, ContextTypes,
-    ConversationHandler, filters
+    Application, CommandHandler, MessageHandler, ConversationHandler,
+    ContextTypes, filters
 )
 
-# === Константы ===
 TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 ADMIN_CHAT_ID = 7367401537
-YOUR_WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # например, https://bot-pro-perevod.onrender.com
 
 CHOOSING, TYPING_TO_ADMIN = range(2)
 
-# === Flask-приложение ===
-app_flask = Flask(__name__)
+app = Flask(__name__)
 
-# === Telegram Application ===
-application = Application.builder().token(TOKEN).build()
+# Create PTB application
+bot_app = Application.builder().token(TOKEN).build()
 
-# === Хэндлеры Telegram ===
+# Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["Отправить файл с переводом", "Написать админам"]]
-    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("Выберите действие:", reply_markup=markup)
+    await update.message.reply_text(
+        "Выберите действие:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
     return CHOOSING
 
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-
     if text == "Отправить файл с переводом":
         await update.message.reply_text(
             "Чтобы отправить свой файл, заполните мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут!"
@@ -61,7 +60,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Диалог отменён. Напишите /start для начала.")
     return ConversationHandler.END
 
-# === ConversationHandler ===
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
@@ -71,29 +69,25 @@ conv_handler = ConversationHandler(
     fallbacks=[CommandHandler("cancel", cancel)],
 )
 
-application.add_handler(conv_handler)
+bot_app.add_handler(conv_handler)
 
-# === Flask маршрут для проверки здоровья ===
-@app_flask.route('/', methods=['GET'])
+# Flask route
+@app.route('/')
 def index():
     return 'Bot is running!'
 
-# === Flask маршрут для Telegram webhook ===
-@app_flask.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.process_update(update)
+    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    bot_app.process_update(update)
     return 'ok'
 
-# === Запуск приложения и установка webhook ===
 if __name__ == '__main__':
     import asyncio
 
     async def set_webhook():
-        webhook_url = f"{YOUR_WEBHOOK_URL}/webhook"
-        await application.bot.set_webhook(url=webhook_url)
-        print(f"Webhook установлен на: {webhook_url}")
+        await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+        print(f"Webhook установлен на: {WEBHOOK_URL}/webhook")
 
     asyncio.run(set_webhook())
-
-    app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
