@@ -1,21 +1,32 @@
 import os
-from telegram import Update, ReplyKeyboardMarkup
+import logging
+from flask import Flask, request
+from telegram import Update, ReplyKeyboardMarkup, Bot
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ContextTypes,
-    ConversationHandler, filters
+    ConversationHandler, filters, Dispatcher
 )
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Flask app
+app = Flask(__name__)
+
+# Переменные окружения
 TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 ADMIN_CHAT_ID = 7367401537
 
+# Состояния
 CHOOSING, TYPING_TO_ADMIN = range(2)
 
-# Create PTB app
-bot_app = Application.builder().token(TOKEN).build()
+# Создание приложения бота
+application = Application.builder().token(TOKEN).build()
 
-# Start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Start command from user {update.effective_user.id}")
     keyboard = [["Отправить файл с переводом", "Написать админам"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
@@ -24,8 +35,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return CHOOSING
 
-# Choice handler
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Choice: {update.message.text}")
     keyboard = [["Отправить файл с переводом", "Написать админам"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -49,7 +60,6 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return CHOOSING
 
-# Forward to admin
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.forward_message(
         chat_id=ADMIN_CHAT_ID,
@@ -64,12 +74,11 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return CHOOSING
 
-# Cancel handler
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Диалог отменён. Напишите /start для начала.")
     return ConversationHandler.END
 
-# Conversation
+# Настройка ConversationHandler
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
@@ -79,12 +88,33 @@ conv_handler = ConversationHandler(
     fallbacks=[CommandHandler("cancel", cancel)],
 )
 
-bot_app.add_handler(conv_handler)
+application.add_handler(conv_handler)
 
-# Entrypoint
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        application.update_queue.put_nowait(update)
+        return 'OK'
+    except Exception as e:
+        logger.error(f"Error in webhook: {e}")
+        return 'Error', 500
+
+@app.route('/')
+def index():
+    return 'Bot is running!'
+
 if __name__ == '__main__':
-    bot_app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get('PORT', 5000)),
-        webhook_url=f"{WEBHOOK_URL}/webhook"
-    )
+    # Установка webhook
+    try:
+        import asyncio
+        bot = Bot(TOKEN)
+        webhook_url = f"{WEBHOOK_URL}/webhook"
+        asyncio.run(bot.set_webhook(url=webhook_url))
+        logger.info(f"Webhook set to {webhook_url}")
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+    
+    # Запуск Flask приложения
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
