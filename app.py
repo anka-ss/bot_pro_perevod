@@ -2,19 +2,19 @@ import os
 from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, ConversationHandler,
-    ContextTypes, filters
+    Application, CommandHandler, MessageHandler, ContextTypes,
+    ConversationHandler, filters
 )
 
-TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+TOKEN = os.environ.get("BOT_TOKEN")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 ADMIN_CHAT_ID = 7367401537
 
 CHOOSING, TYPING_TO_ADMIN = range(2)
 
-app = Flask(__name__)
+flask_app = Flask(__name__)
 
-# Create PTB application
+# Create PTB app
 bot_app = Application.builder().token(TOKEN).build()
 
 # Handlers
@@ -33,14 +33,12 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Чтобы отправить свой файл, заполните мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут!"
         )
         return CHOOSING
-
     elif text == "Написать админам":
         await update.message.reply_text(
             "Здесь можно написать что угодно. Мы ответим вам в ближайшее время.\n"
             "Пожалуйста, добавьте в сообщение свой ник в формате @никнейм."
         )
         return TYPING_TO_ADMIN
-
     else:
         await update.message.reply_text("Пожалуйста, выберите одну из кнопок.")
         return CHOOSING
@@ -60,6 +58,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Диалог отменён. Напишите /start для начала.")
     return ConversationHandler.END
 
+# Conversation
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
@@ -71,12 +70,12 @@ conv_handler = ConversationHandler(
 
 bot_app.add_handler(conv_handler)
 
-# Flask route
-@app.route('/')
+# Flask routes
+@flask_app.route('/')
 def index():
     return 'Bot is running!'
 
-@app.route('/webhook', methods=['POST'])
+@flask_app.route('/webhook', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot_app.bot)
     bot_app.process_update(update)
@@ -85,9 +84,10 @@ def webhook():
 if __name__ == '__main__':
     import asyncio
 
-    async def set_webhook():
+    async def main():
+        await bot_app.bot.delete_webhook()
         await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-        print(f"Webhook установлен на: {WEBHOOK_URL}/webhook")
+        print(f"Webhook установлен на {WEBHOOK_URL}/webhook")
 
-    asyncio.run(set_webhook())
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    asyncio.run(main())
+    flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
