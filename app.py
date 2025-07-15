@@ -83,14 +83,8 @@ bot_app.add_handler(conv_handler)
 
 # Entrypoint
 if __name__ == '__main__':
-    import asyncio
-
-    async def main():
-        await bot_app.bot.delete_webhook()
-        await bot_app.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.environ.get('PORT', 5000)),
-            webhook_url=f"{WEBHOOK_URL}/webhook"
-        )
-
-    asyncio.run(main())
+    bot_app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get('PORT', 5000)),
+        webhook_url=f"{WEBHOOK_URL}/webhook"
+    )
