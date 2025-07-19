@@ -1,2 +1,2 @@
-Flask
-python-telegram-bot[webhooks]>=20.0
+aiogram==3.13.1
+aiohttp==3.10.11
