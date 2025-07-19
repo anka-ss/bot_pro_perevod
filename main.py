@@ -40,6 +40,10 @@ def get_main_keyboard():
 @dp.message(CommandStart())
 async def start_handler(message: types.Message):
     """Обработчик команды /start"""
+    # Работаем только в личных чатах
+    if message.chat.type != 'private':
+        return
+        
     await message.answer(
         "Привет! 👋\n\nВыберите действие:",
         reply_markup=get_main_keyboard()
@@ -48,6 +52,10 @@ async def start_handler(message: types.Message):
 @dp.message(lambda message: message.text == "📤 Отправить файлик")
 async def send_file_handler(message: types.Message):
     """Обработчик кнопки 'Отправить файлик'"""
+    # Работаем только в личных чатах
+    if message.chat.type != 'private':
+        return
+        
     await message.answer(
         "Чтобы отправить файлик, надо заполнить мини-анкету: ссылка. Это займет всего пару минут ✨",
         reply_markup=get_main_keyboard()
@@ -56,6 +64,10 @@ async def send_file_handler(message: types.Message):
 @dp.message(lambda message: message.text == "✍️ Написать админам")
 async def contact_admin_handler(message: types.Message):
     """Обработчик кнопки 'Написать админам'"""
+    # Работаем только в личных чатах
+    if message.chat.type != 'private':
+        return
+        
     await message.answer(
         "Ответьте на это сообщение — и админы ответят так быстро, как смогут ✍️. "
         "Обязательно напишите в конце свой @никнейм",
@@ -65,6 +77,10 @@ async def contact_admin_handler(message: types.Message):
 @dp.message()
 async def message_handler(message: types.Message):
     """Обработчик всех остальных сообщений"""
+    
+    # Работаем только в личных чатах
+    if message.chat.type != 'private':
+        return
     
     # Проверяем, является ли сообщение ответом на сообщение бота
     if message.reply_to_message and message.reply_to_message.from_user.id == bot.id:
@@ -92,10 +108,8 @@ async def message_handler(message: types.Message):
             
         except Exception as e:
             logging.error(f"Ошибка при отправке сообщения админам: {e}")
-            logging.error(f"ADMIN_GROUP_ID: {ADMIN_GROUP_ID}")
-            logging.error(f"Тип ошибки: {type(e).__name__}")
             await message.answer(
-                f"❌ Произошла ошибка при отправке сообщения: {str(e)[:100]}...",
+                "❌ Произошла ошибка при отправке сообщения. Попробуйте позже.",
                 reply_markup=get_main_keyboard()
             )
     else:
