@@ -95,10 +95,12 @@ async def message_handler(message: types.Message):
             admin_message = f"{user_info}\n\n📝 Сообщение:\n{message.text}"
             
             # Отправляем в админскую группу
-            await bot.send_message(
+            logging.info(f"Отправляем сообщение в группу: {ADMIN_GROUP_ID}")
+            result = await bot.send_message(
                 chat_id=ADMIN_GROUP_ID,
                 text=admin_message
             )
+            logging.info(f"Сообщение отправлено успешно: {result.message_id}")
             
             # Подтверждаем отправку пользователю
             await message.answer(
