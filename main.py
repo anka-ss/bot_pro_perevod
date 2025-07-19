@@ -92,8 +92,10 @@ async def message_handler(message: types.Message):
             
         except Exception as e:
             logging.error(f"Ошибка при отправке сообщения админам: {e}")
+            logging.error(f"ADMIN_GROUP_ID: {ADMIN_GROUP_ID}")
+            logging.error(f"Тип ошибки: {type(e).__name__}")
             await message.answer(
-                "❌ Произошла ошибка при отправке сообщения. Попробуйте позже.",
+                f"❌ Произошла ошибка при отправке сообщения: {str(e)[:100]}...",
                 reply_markup=get_main_keyboard()
             )
     else:
