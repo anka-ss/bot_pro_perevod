@@ -5,13 +5,19 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
+from aiohttp.web_app import Application
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
-# Получаем токен бота и ID группы из переменных окружения
+# Получаем переменные окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID', '-7367401537')  # ID группы с минусом
+ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID', '-7367401537')
+WEBHOOK_HOST = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
+WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
+WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден в переменных окружения!")
@@ -97,15 +103,41 @@ async def message_handler(message: types.Message):
             reply_markup=get_main_keyboard()
         )
 
-async def main():
-    """Основная функция запуска бота"""
-    try:
-        logging.info("Бот запускается...")
-        await dp.start_polling(bot)
-    except Exception as e:
-        logging.error(f"Ошибка при запуске бота: {e}")
-    finally:
-        await bot.session.close()
+async def on_startup():
+    """Настройка webhook при запуске"""
+    logging.info(f"Настройка webhook: {WEBHOOK_URL}")
+    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+
+async def on_shutdown():
+    """Очистка при завершении"""
+    logging.info("Удаление webhook...")
+    await bot.delete_webhook()
+    await bot.session.close()
+
+def main():
+    """Основная функция запуска приложения"""
+    
+    # Создаем веб-приложение
+    app = Application()
+    
+    # Настраиваем webhook handler
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    
+    # Настраиваем приложение
+    setup_application(app, dp, bot=bot)
+    
+    # Добавляем обработчики запуска и завершения
+    app.on_startup.append(lambda app: asyncio.create_task(on_startup()))
+    app.on_shutdown.append(lambda app: asyncio.create_task(on_shutdown()))
+    
+    # Запускаем веб-сервер
+    port = int(os.getenv('PORT', 10000))
+    logging.info(f"Запуск сервера на порту {port}")
+    web.run_app(app, host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
