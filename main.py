@@ -3,8 +3,7 @@ import logging
 import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from aiohttp.web_app import Application
@@ -27,13 +26,16 @@ dp = Dispatcher()
 
 def get_main_keyboard():
     """Создает основную клавиатуру с кнопками"""
-    builder = InlineKeyboardBuilder()
-    builder.add(
-        InlineKeyboardButton(text="📤 Отправить файлик", callback_data="send_file"),
-        InlineKeyboardButton(text="✍️ Написать админам", callback_data="contact_admin")
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📤 Отправить файлик")],
+            [KeyboardButton(text="✍️ Написать админам")]
+        ],
+        resize_keyboard=True,  # Подгоняет размер кнопок
+        one_time_keyboard=False,  # Клавиатура остается после нажатия
+        persistent=True  # Клавиатура всегда видна
     )
-    builder.adjust(1)  # По одной кнопке в ряд
-    return builder.as_markup()
+    return keyboard
 
 @dp.message(CommandStart())
 async def start_handler(message: types.Message):
@@ -43,24 +45,22 @@ async def start_handler(message: types.Message):
         reply_markup=get_main_keyboard()
     )
 
-@dp.callback_query(lambda c: c.data == "send_file")
-async def send_file_handler(callback: types.CallbackQuery):
+@dp.message(lambda message: message.text == "📤 Отправить файлик")
+async def send_file_handler(message: types.Message):
     """Обработчик кнопки 'Отправить файлик'"""
-    await callback.message.answer(
+    await message.answer(
         "Чтобы отправить файлик, надо заполнить мини-анкету: ссылка. Это займет всего пару минут ✨",
         reply_markup=get_main_keyboard()
     )
-    await callback.answer()
 
-@dp.callback_query(lambda c: c.data == "contact_admin")
-async def contact_admin_handler(callback: types.CallbackQuery):
+@dp.message(lambda message: message.text == "✍️ Написать админам")
+async def contact_admin_handler(message: types.Message):
     """Обработчик кнопки 'Написать админам'"""
-    await callback.message.answer(
+    await message.answer(
         "Ответьте на это сообщение — и админы ответят так быстро, как смогут ✍️. "
         "Обязательно напишите в конце свой @никнейм",
         reply_markup=get_main_keyboard()
     )
-    await callback.answer()
 
 @dp.message()
 async def message_handler(message: types.Message):
