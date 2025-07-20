@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Получаем переменные окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID', '-7367401537')
+ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID')
 WEBHOOK_HOST = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
@@ -137,7 +137,7 @@ async def send_file_handler(message: types.Message):
         return
         
     await message.answer(
-        "Чтобы отправить файлик, надо заполнить мини-анкету: ссылка. Это займет всего пару минут ✨",
+        "Чтобы отправить файлик, надо заполнить мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут ✨",
         reply_markup=get_main_keyboard()
     )
 
