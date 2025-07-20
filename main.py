@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import os
+from datetime import datetime, timedelta
+from collections import defaultdict
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
@@ -25,13 +27,41 @@ waiting_for_admin_message = {}
 # Формат: {message_id_от_бота_в_админ_чате: user_id}
 admin_message_to_user = {}
 
+# Статистика
+stats = {
+    'total_users': set(),  # Уникальные пользователи
+    'messages_today': 0,   # Сообщения за сегодня
+    'messages_this_week': 0,  # Сообщения за неделю
+    'daily_messages': defaultdict(int),  # По дням
+    'start_time': datetime.now()  # Время запуска бота
+}
+
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден в переменных окружения!")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-def get_main_keyboard():
+def update_stats(user_id):
+    """Обновляет статистику при новом сообщении"""
+    now = datetime.now()
+    today = now.date()
+    
+    # Добавляем пользователя в уникальные
+    stats['total_users'].add(user_id)
+    
+    # Увеличиваем счетчики
+    stats['daily_messages'][today] += 1
+    
+    # Пересчитываем сегодняшние сообщения
+    stats['messages_today'] = stats['daily_messages'][today]
+    
+    # Пересчитываем сообщения за неделю
+    week_ago = today - timedelta(days=7)
+    stats['messages_this_week'] = sum(
+        count for date, count in stats['daily_messages'].items() 
+        if date >= week_ago
+    )
     """Создает основную клавиатуру с кнопками"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -50,11 +80,52 @@ async def start_handler(message: types.Message):
     # Работаем только в личных чатах
     if message.chat.type != 'private':
         return
+    
+    # Обновляем статистику
+    update_stats(message.from_user.id)
         
     await message.answer(
         "Привет! 👋\n\nВыберите действие:",
         reply_markup=get_main_keyboard()
     )
+
+@dp.message(Command('stats'))
+async def stats_handler(message: types.Message):
+    """Обработчик команды /stats - только для админов"""
+    # Проверяем, что это админ (сообщение из админского чата или от админа)
+    is_admin = (
+        str(message.chat.id) == ADMIN_GROUP_ID or  # Сообщение из админской группы
+        str(message.from_user.id) == ADMIN_GROUP_ID.replace('-', '')  # Личное сообщение от админа
+    )
+    
+    if not is_admin:
+        return  # Игнорируем команду от обычных пользователей
+    
+    # Формируем статистику
+    uptime = datetime.now() - stats['start_time']
+    uptime_str = f"{uptime.days} дн. {uptime.seconds // 3600} ч. {(uptime.seconds % 3600) // 60} мин."
+    
+    # Последние 7 дней
+    recent_days = []
+    for i in range(6, -1, -1):  # От 6 дней назад до сегодня
+        day = datetime.now().date() - timedelta(days=i)
+        count = stats['daily_messages'].get(day, 0)
+        day_name = "Сегодня" if i == 0 else f"{day.strftime('%d.%m')}"
+        recent_days.append(f"  {day_name}: {count}")
+    
+    stats_text = f"""📊 **Статистика бота**
+
+👥 **Уникальные пользователи:** {len(stats['total_users'])}
+📨 **Сообщений сегодня:** {stats['messages_today']}
+📈 **Сообщений за неделю:** {stats['messages_this_week']}
+
+📅 **По дням:**
+{chr(10).join(recent_days)}
+
+⏱️ **Время работы:** {uptime_str}
+🚀 **Запущен:** {stats['start_time'].strftime('%d.%m.%Y %H:%M')}"""
+    
+    await message.answer(stats_text, parse_mode='Markdown')
 
 @dp.message(lambda message: message.text == "📤 Отправить файлик")
 async def send_file_handler(message: types.Message):
@@ -64,7 +135,7 @@ async def send_file_handler(message: types.Message):
         return
         
     await message.answer(
-        "Чтобы отправить файлик, надо заполнить мини-анкету: ссылка. Это займет всего пару минут ✨",
+        "Чтобы отправить файлик, надо заполнить мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут ✨",
         reply_markup=get_main_keyboard()
     )
 
@@ -77,6 +148,9 @@ async def contact_admin_handler(message: types.Message):
     
     # Помечаем пользователя как ожидающего ввода сообщения для админов
     waiting_for_admin_message[message.from_user.id] = True
+    
+    # Обновляем статистику
+    update_stats(message.from_user.id)
         
     await message.answer(
         "Напишите ваше сообщение — и админы ответят так быстро, как смогут ✍️. "
@@ -151,7 +225,7 @@ async def message_handler(message: types.Message):
             
             # Подтверждаем отправку пользователю
             await message.answer(
-                "✅ Ваше сообщение отправлено админам!",
+                "✅ Сообщение отправлено админам!",
                 reply_markup=get_main_keyboard()
             )
             
