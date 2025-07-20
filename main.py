@@ -62,6 +62,8 @@ def update_stats(user_id):
         count for date, count in stats['daily_messages'].items() 
         if date >= week_ago
     )
+
+def get_main_keyboard():
     """Создает основную клавиатуру с кнопками"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
