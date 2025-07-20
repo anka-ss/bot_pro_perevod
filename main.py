@@ -135,7 +135,7 @@ async def send_file_handler(message: types.Message):
         return
         
     await message.answer(
-        "Чтобы отправить файлик, надо заполнить мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут ✨",
+        "Чтобы отправить файлик, надо заполнить мини-анкету: ссылка. Это займет всего пару минут ✨",
         reply_markup=get_main_keyboard()
     )
 
@@ -225,7 +225,7 @@ async def message_handler(message: types.Message):
             
             # Подтверждаем отправку пользователю
             await message.answer(
-                "✅ Сообщение отправлено админам!",
+                "✅ Ваше сообщение отправлено админам!",
                 reply_markup=get_main_keyboard()
             )
             
