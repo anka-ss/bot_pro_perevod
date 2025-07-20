@@ -18,6 +18,9 @@ WEBHOOK_HOST = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
 
+# Словарь для хранения состояний пользователей (ожидают ли ответа админам)
+waiting_for_admin_message = {}
+
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден в переменных окружения!")
 
@@ -67,9 +70,12 @@ async def contact_admin_handler(message: types.Message):
     # Работаем только в личных чатах
     if message.chat.type != 'private':
         return
+    
+    # Помечаем пользователя как ожидающего ввода сообщения для админов
+    waiting_for_admin_message[message.from_user.id] = True
         
     await message.answer(
-        "Ответьте на это сообщение — и админы ответят так быстро, как смогут ✍️. "
+        "Напишите ваше сообщение — и админы ответят так быстро, как смогут ✍️. "
         "Обязательно напишите в конце свой @никнейм",
         reply_markup=get_main_keyboard()
     )
@@ -82,9 +88,14 @@ async def message_handler(message: types.Message):
     if message.chat.type != 'private':
         return
     
-    # Проверяем, является ли сообщение ответом на сообщение бота
-    if message.reply_to_message and message.reply_to_message.from_user.id == bot.id:
-        # Это ответ на сообщение бота - пересылаем в админскую группу
+    user_id = message.from_user.id
+    
+    # Проверяем, ожидает ли пользователь ввода сообщения для админов
+    if waiting_for_admin_message.get(user_id, False):
+        # Убираем пометку
+        waiting_for_admin_message[user_id] = False
+        
+        # Пересылаем сообщение админам
         try:
             # Формируем сообщение для админов
             user_info = f"👤 Пользователь: {message.from_user.full_name}"
