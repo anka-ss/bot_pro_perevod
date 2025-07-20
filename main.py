@@ -15,10 +15,16 @@ logging.basicConfig(level=logging.INFO)
 
 # Получаем переменные окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID', '-7367401537')
+ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID')
 WEBHOOK_HOST = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
+
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN не найден в переменных окружения!")
+
+if not ADMIN_GROUP_ID:
+    raise ValueError("ADMIN_GROUP_ID не найден в переменных окружения!")
 
 # Словарь для хранения состояний пользователей (ожидают ли ответа админам)
 waiting_for_admin_message = {}
@@ -35,9 +41,6 @@ stats = {
     'daily_messages': defaultdict(int),  # По дням
     'start_time': datetime.now()  # Время запуска бота
 }
-
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не найден в переменных окружения!")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -211,8 +214,8 @@ async def message_handler(message: types.Message):
                 # Подтверждаем админу
                 await message.reply("✅ Ответ отправлен пользователю!")
                 
-                # Удаляем связь (необязательно, но экономит память)
-                del admin_message_to_user[original_message_id]
+                # НЕ удаляем связь - теперь можно отвечать много раз на одно сообщение
+                # del admin_message_to_user[original_message_id]
                 
             except Exception as e:
                 logging.error(f"Ошибка при отправке ответа пользователю: {e}")
@@ -296,7 +299,7 @@ async def message_handler(message: types.Message):
     else:
         # Обычное сообщение - показываем дружелюбное предложение
         await message.answer(
-            "Есть вопрос? Нажмите «Написать админам» 👀",
+            "Есть вопрос? Нажмите «Написать админам» 👀",
             reply_markup=get_main_keyboard()
         )
 
