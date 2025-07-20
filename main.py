@@ -286,9 +286,9 @@ async def message_handler(message: types.Message):
                 
             except Exception as e:
                 logging.error(f"Ошибка при отправке ответа пользователю: {e}")
-                await message.reply("❌ Ошибка при отправке ответа пользователю")
+                await message.reply("❌ Ошибка при отправке ответа.")
         else:
-            await message.reply("❌ Не удалось найти пользователя для ответа")
+            await message.reply("❌ Отвечайте именно на стикер.")
         return
     
     # Работаем только в личных чатах для обычных пользователей
