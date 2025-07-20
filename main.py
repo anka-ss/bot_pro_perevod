@@ -203,13 +203,80 @@ async def message_handler(message: types.Message):
         
         if target_user_id:
             try:
-                # Отправляем ответ пользователю
+                # Определяем клавиатуру для пользователя
                 keyboard = get_admin_chat_keyboard() if waiting_for_admin_message.get(target_user_id, False) else get_main_keyboard()
-                await bot.send_message(
-                    chat_id=target_user_id,
-                    text=f"💬 Ответ от админов:\n\n{message.text}",
-                    reply_markup=keyboard
-                )
+                
+                # Отправляем ответ пользователю в зависимости от типа сообщения админа
+                if message.text:
+                    # Текстовое сообщение от админа
+                    await bot.send_message(
+                        chat_id=target_user_id,
+                        text=f"💬 Ответ от админов:\n\n{message.text}",
+                        reply_markup=keyboard
+                    )
+                elif message.sticker:
+                    # Стикер от админа
+                    await bot.send_message(
+                        chat_id=target_user_id,
+                        text="💬 Ответ от админов:",
+                        reply_markup=keyboard
+                    )
+                    await bot.send_sticker(
+                        chat_id=target_user_id,
+                        sticker=message.sticker.file_id
+                    )
+                elif message.animation:
+                    # Гифка от админа
+                    await bot.send_message(
+                        chat_id=target_user_id,
+                        text="💬 Ответ от админов:",
+                        reply_markup=keyboard
+                    )
+                    await bot.send_animation(
+                        chat_id=target_user_id,
+                        animation=message.animation.file_id,
+                        caption=message.caption
+                    )
+                elif message.photo:
+                    # Фото от админа
+                    caption = "💬 Ответ от админов"
+                    if message.caption:
+                        caption += f":\n\n{message.caption}"
+                    await bot.send_photo(
+                        chat_id=target_user_id,
+                        photo=message.photo[-1].file_id,
+                        caption=caption,
+                        reply_markup=keyboard
+                    )
+                elif message.video:
+                    # Видео от админа
+                    caption = "💬 Ответ от админов"
+                    if message.caption:
+                        caption += f":\n\n{message.caption}"
+                    await bot.send_video(
+                        chat_id=target_user_id,
+                        video=message.video.file_id,
+                        caption=caption,
+                        reply_markup=keyboard
+                    )
+                elif message.voice:
+                    # Голосовое от админа
+                    await bot.send_message(
+                        chat_id=target_user_id,
+                        text="💬 Ответ от админов:",
+                        reply_markup=keyboard
+                    )
+                    await bot.send_voice(
+                        chat_id=target_user_id,
+                        voice=message.voice.file_id
+                    )
+                else:
+                    # Другие типы сообщений
+                    await bot.send_message(
+                        chat_id=target_user_id,
+                        text="💬 Админ отправил ответ (неподдерживаемый тип сообщения)",
+                        reply_markup=keyboard
+                    )
                 
                 # Подтверждаем админу
                 await message.reply("✅ Ответ отправлен пользователю!")
