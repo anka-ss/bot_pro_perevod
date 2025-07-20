@@ -241,14 +241,41 @@ async def message_handler(message: types.Message):
                 user_info += f" (@{message.from_user.username})"
             user_info += f"\n🆔 ID: {message.from_user.id}"
             
-            admin_message = f"{user_info}\n\n📝 Сообщение:\n{message.text}"
-            
-            # Отправляем в админскую группу
-            logging.info(f"Отправляем сообщение в группу: {ADMIN_GROUP_ID}")
-            result = await bot.send_message(
-                chat_id=ADMIN_GROUP_ID,
-                text=admin_message
-            )
+            # Определяем тип сообщения и отправляем соответственно
+            if message.text:
+                # Текстовое сообщение
+                admin_message = f"{user_info}\n\n📝 Сообщение:\n{message.text}"
+                result = await bot.send_message(
+                    chat_id=ADMIN_GROUP_ID,
+                    text=admin_message
+                )
+            elif message.sticker:
+                # Стикер
+                await bot.send_message(
+                    chat_id=ADMIN_GROUP_ID,
+                    text=f"{user_info}\n\n🎭 Отправил стикер:"
+                )
+                result = await bot.send_sticker(
+                    chat_id=ADMIN_GROUP_ID,
+                    sticker=message.sticker.file_id
+                )
+            elif message.animation:
+                # Гифка (анимация)
+                caption = f"{user_info}\n\n🎬 Отправил гифку"
+                if message.caption:
+                    caption += f":\n{message.caption}"
+                result = await bot.send_animation(
+                    chat_id=ADMIN_GROUP_ID,
+                    animation=message.animation.file_id,
+                    caption=caption
+                )
+            else:
+                # Неподдерживаемый тип
+                await message.answer(
+                    "К сожалению, такое сообщение отправить нельзя. Только текст, стикер или гифку.",
+                    reply_markup=get_admin_chat_keyboard()
+                )
+                return  # Выходим, не отправляя админам
             
             # Сохраняем связь между сообщением админа и пользователем
             admin_message_to_user[result.message_id] = user_id
@@ -270,9 +297,9 @@ async def message_handler(message: types.Message):
                 reply_markup=get_admin_chat_keyboard()
             )
     else:
-        # Обычное сообщение - показываем меню
+        # Обычное сообщение - показываем дружелюбное предложение
         await message.answer(
-            "Выберите действие:",
+            "Есть вопрос к админам? Нажмите на кнопку «Написать админам» 💬",
             reply_markup=get_main_keyboard()
         )
 
