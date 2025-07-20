@@ -21,6 +21,10 @@ WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
 # Словарь для хранения состояний пользователей (ожидают ли ответа админам)
 waiting_for_admin_message = {}
 
+# Словарь для связывания сообщений админа с пользователями
+# Формат: {message_id_от_бота_в_админ_чате: user_id}
+admin_message_to_user = {}
+
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден в переменных окружения!")
 
@@ -84,7 +88,35 @@ async def contact_admin_handler(message: types.Message):
 async def message_handler(message: types.Message):
     """Обработчик всех остальных сообщений"""
     
-    # Работаем только в личных чатах
+    # Если сообщение из админского чата и это ответ на сообщение бота
+    if str(message.chat.id) == ADMIN_GROUP_ID and message.reply_to_message and message.reply_to_message.from_user.id == bot.id:
+        # Ищем пользователя для ответа
+        original_message_id = message.reply_to_message.message_id
+        target_user_id = admin_message_to_user.get(original_message_id)
+        
+        if target_user_id:
+            try:
+                # Отправляем ответ пользователю
+                await bot.send_message(
+                    chat_id=target_user_id,
+                    text=f"💬 Ответ от админов:\n\n{message.text}",
+                    reply_markup=get_main_keyboard()
+                )
+                
+                # Подтверждаем админу
+                await message.reply("✅ Ответ отправлен пользователю!")
+                
+                # Удаляем связь (необязательно, но экономит память)
+                del admin_message_to_user[original_message_id]
+                
+            except Exception as e:
+                logging.error(f"Ошибка при отправке ответа пользователю: {e}")
+                await message.reply("❌ Ошибка при отправке ответа пользователю")
+        else:
+            await message.reply("❌ Не удалось найти пользователя для ответа")
+        return
+    
+    # Работаем только в личных чатах для обычных пользователей
     if message.chat.type != 'private':
         return
     
@@ -111,6 +143,10 @@ async def message_handler(message: types.Message):
                 chat_id=ADMIN_GROUP_ID,
                 text=admin_message
             )
+            
+            # Сохраняем связь между сообщением админа и пользователем
+            admin_message_to_user[result.message_id] = user_id
+            
             logging.info(f"Сообщение отправлено успешно: {result.message_id}")
             
             # Подтверждаем отправку пользователю
