@@ -155,8 +155,7 @@ async def contact_admin_handler(message: types.Message):
     update_stats(message.from_user.id)
         
     await message.answer(
-        "Напишите ваше сообщение — и админы ответят так быстро, как смогут ✍️. "
-        "Обязательно напишите в конце свой @никнейм",
+        "Напишите ваше сообщение — и админы ответят так быстро, как смогут ✍️",
         reply_markup=get_main_keyboard()
     )
 
