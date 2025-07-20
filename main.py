@@ -132,11 +132,19 @@ async def on_shutdown():
     await bot.delete_webhook()
     await bot.session.close()
 
+async def health_check(request):
+    """Health check endpoint для мониторинга"""
+    return web.Response(text="Bot is running!")
+
 def main():
     """Основная функция запуска приложения"""
     
     # Создаем веб-приложение
     app = Application()
+    
+    # Добавляем health check
+    app.router.add_get('/', health_check)
+    app.router.add_get('/health', health_check)
     
     # Настраиваем webhook handler
     webhook_requests_handler = SimpleRequestHandler(
