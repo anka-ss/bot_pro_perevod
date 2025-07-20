@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Получаем переменные окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID')
+ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID', '-7367401537')
 WEBHOOK_HOST = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
@@ -73,6 +73,19 @@ def get_main_keyboard():
         resize_keyboard=True,  # Подгоняет размер кнопок
         one_time_keyboard=False,  # Клавиатура остается после нажатия
         persistent=True  # Клавиатура всегда видна
+    )
+    return keyboard
+
+def get_admin_chat_keyboard():
+    """Создает клавиатуру для режима общения с админами"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="❌ Закончить общение")],
+            [KeyboardButton(text="📤 Отправить файлик")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        persistent=True
     )
     return keyboard
 
@@ -137,7 +150,7 @@ async def send_file_handler(message: types.Message):
         return
         
     await message.answer(
-        "Чтобы отправить файлик, надо заполнить мини-анкету: https://tally.so/r/3qQZg2. Это займет всего пару минут ✨",
+        "Чтобы отправить файлик, надо заполнить мини-анкету: ссылка. Это займет всего пару минут ✨",
         reply_markup=get_main_keyboard()
     )
 
@@ -155,7 +168,25 @@ async def contact_admin_handler(message: types.Message):
     update_stats(message.from_user.id)
         
     await message.answer(
-        "Напишите ваше сообщение — и админы ответят так быстро, как смогут ✍️",
+        "💬 Режим общения с админами активирован!\n\n"
+        "Теперь все ваши сообщения будут пересылаться админам. "
+        "Для завершения нажмите '❌ Закончить общение'.\n\n"
+        "Напишите ваше сообщение:",
+        reply_markup=get_admin_chat_keyboard()
+    )
+
+@dp.message(lambda message: message.text == "❌ Закончить общение")
+async def end_admin_chat_handler(message: types.Message):
+    """Обработчик кнопки 'Закончить общение'"""
+    # Работаем только в личных чатах
+    if message.chat.type != 'private':
+        return
+    
+    # Убираем пометку ожидания сообщений для админов
+    waiting_for_admin_message[message.from_user.id] = False
+        
+    await message.answer(
+        "✅ Общение с админами завершено.\n\nВыберите действие:",
         reply_markup=get_main_keyboard()
     )
 
@@ -172,10 +203,11 @@ async def message_handler(message: types.Message):
         if target_user_id:
             try:
                 # Отправляем ответ пользователю
+                keyboard = get_admin_chat_keyboard() if waiting_for_admin_message.get(target_user_id, False) else get_main_keyboard()
                 await bot.send_message(
                     chat_id=target_user_id,
                     text=f"💬 Ответ от админов:\n\n{message.text}",
-                    reply_markup=get_main_keyboard()
+                    reply_markup=keyboard
                 )
                 
                 # Подтверждаем админу
@@ -199,8 +231,7 @@ async def message_handler(message: types.Message):
     
     # Проверяем, ожидает ли пользователь ввода сообщения для админов
     if waiting_for_admin_message.get(user_id, False):
-        # Убираем пометку
-        waiting_for_admin_message[user_id] = False
+        # НЕ убираем пометку - пользователь остается в режиме общения с админами
         
         # Пересылаем сообщение админам
         try:
@@ -224,17 +255,19 @@ async def message_handler(message: types.Message):
             
             logging.info(f"Сообщение отправлено успешно: {result.message_id}")
             
-            # Подтверждаем отправку пользователю
+            # Подтверждаем отправку пользователю с напоминанием о режиме
             await message.answer(
-                "✅ Ваше сообщение отправлено админам!",
-                reply_markup=get_main_keyboard()
+                "✅ Сообщение отправлено админам!\n\n"
+                "💬 Режим общения активен - можете писать следующие сообщения.\n"
+                "Для завершения нажмите '❌ Закончить общение'",
+                reply_markup=get_admin_chat_keyboard()
             )
             
         except Exception as e:
             logging.error(f"Ошибка при отправке сообщения админам: {e}")
             await message.answer(
                 "❌ Произошла ошибка при отправке сообщения. Попробуйте позже.",
-                reply_markup=get_main_keyboard()
+                reply_markup=get_admin_chat_keyboard()
             )
     else:
         # Обычное сообщение - показываем меню
