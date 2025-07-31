@@ -71,6 +71,7 @@ def get_main_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📤 Отправить данные")],
+            [KeyboardButton(text="📰 Сообщить новость")],
             [KeyboardButton(text="✍️ Написать админам")]
         ],
         resize_keyboard=True,  # Подгоняет размер кнопок
@@ -84,7 +85,8 @@ def get_admin_chat_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="❌ Закончить общение")],
-            [KeyboardButton(text="📤 Отправить данные")]
+            [KeyboardButton(text="📤 Отправить данные")],
+            [KeyboardButton(text="📰 Сообщить новость")]
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -158,6 +160,22 @@ async def send_file_handler(message: types.Message):
         "2. Карточку переводчика: https://tally.so/r/wAexoN\n\n"
         "Это займет всего пару минут ✨",
         parse_mode='HTML',
+        disable_web_page_preview=True,
+        reply_markup=get_main_keyboard()
+    )
+
+@dp.message(lambda message: message.text == "📰 Сообщить новость")
+async def news_handler(message: types.Message):
+    """Обработчик кнопки 'Сообщить новость'"""
+    # Работаем только в личных чатах
+    if message.chat.type != 'private':
+        return
+        
+    await message.answer(
+        "Здесь вы можете сообщить любую новость! Например:\n"
+        "- Вы закончили перевод.\n"
+        "- Вы взяли что-то новое на перевод.\n\n"
+        "Чтобы отправить новость, заполните анкету: https://tally.so/r/wkBjBd",
         disable_web_page_preview=True,
         reply_markup=get_main_keyboard()
     )
