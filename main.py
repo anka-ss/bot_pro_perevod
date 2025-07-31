@@ -172,9 +172,7 @@ async def news_handler(message: types.Message):
         return
         
     await message.answer(
-        "Здесь вы можете сообщить любую новость! Например:\n"
-        "- Вы закончили перевод.\n"
-        "- Вы взяли что-то новое на перевод.\n\n"
+        "Здесь вы можете сообщить любую новость. Например, что взяли новый перевод или закончили текущий.\n\n"
         "Чтобы отправить новость, заполните анкету: https://tally.so/r/wkBjBd",
         disable_web_page_preview=True,
         reply_markup=get_main_keyboard()
