@@ -153,10 +153,9 @@ async def send_file_handler(message: types.Message):
         return
         
     await message.answer(
-        "Чтобы опубликовать ваши новеллы, нам нужна информация. Заполните 2 формы:\n"
+        "Чтобы опубликовать ваши новеллы, нам нужна информация.\n\n<b>Заполните 2 формы:</b>\n"
         "1. Анкету по новеллам: https://tally.so/r/3qQZg2\n"
-        "2. Карточку переводчика: https://tally.so/r/wAexoN\n"
-        "Это займет всего пару минут ✨",
+        "2. Карточку переводчика: https://tally.so/r/wAexoN\n",
         reply_markup=get_main_keyboard()
     )
 
