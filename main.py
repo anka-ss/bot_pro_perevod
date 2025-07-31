@@ -84,9 +84,7 @@ def get_admin_chat_keyboard():
     """Создает клавиатуру для режима общения с админами"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="❌ Закончить общение")],
-            [KeyboardButton(text="📤 Отправить данные")],
-            [KeyboardButton(text="📰 Сообщить новость")]
+            [KeyboardButton(text="❌ Закончить общение")]
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
