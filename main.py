@@ -70,7 +70,7 @@ def get_main_keyboard():
     """Создает основную клавиатуру с кнопками"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📤 Отправить файлик")],
+            [KeyboardButton(text="📤 Отправить данные")],
             [KeyboardButton(text="✍️ Написать админам")]
         ],
         resize_keyboard=True,  # Подгоняет размер кнопок
@@ -84,7 +84,7 @@ def get_admin_chat_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="❌ Закончить общение")],
-            [KeyboardButton(text="📤 Отправить файлик")]
+            [KeyboardButton(text="📤 Отправить данные")]
         ],
         resize_keyboard=True,
         one_time_keyboard=False,
