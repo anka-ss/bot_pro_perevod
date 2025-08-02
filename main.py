@@ -1,437 +1,565 @@
-import asyncio
-import logging
-import os
-from datetime import datetime, timedelta
-from collections import defaultdict
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart, Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
-from aiohttp.web_app import Application
+const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
+const path = require('path');
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
+// Инициализация Express для веб-сервера (для Render.com)
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-# Получаем переменные окружения
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID')
-WEBHOOK_HOST = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
-WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
-WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
+// Токен бота (получить у @BotFather)
+const BOT_TOKEN = process.env.BOT_TOKEN;
 
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не найден в переменных окружения!")
+// ID групп и тем для мониторинга (заполнить своими значениями)
+const MONITORED_GROUPS = process.env.MONITORED_GROUPS ? process.env.MONITORED_GROUPS.split(',') : [];
+const MONITORED_TOPICS = process.env.MONITORED_TOPICS ? process.env.MONITORED_TOPICS.split(',') : [];
 
-if not ADMIN_GROUP_ID:
-    raise ValueError("ADMIN_GROUP_ID не найден в переменных окружения!")
+// ID группы для отчетов о банах
+const REPORTS_GROUP_ID = process.env.REPORTS_GROUP_ID;
 
-# Словарь для хранения состояний пользователей (ожидают ли ответа админам)
-waiting_for_admin_message = {}
+// Создаем экземпляр бота с увеличенным тайм-аутом
+const bot = new TelegramBot(BOT_TOKEN, { 
+    polling: {
+        interval: 1000,
+        autoStart: true,
+        params: {
+            timeout: 30
+        }
+    }
+});
 
-# Словарь для связывания сообщений админа с пользователями
-# Формат: {message_id_от_бота_в_админ_чате: user_id}
-admin_message_to_user = {}
+// Хранилище предупреждений и черного списка (в продакшене лучше использовать базу данных)
+const userWarnings = new Map(); // userId -> количество предупреждений
+const blackList = new Set(); // множество заблокированных пользователей
+const recentExplanations = new Map(); // userId -> timestamp последнего объяснения
 
-# Статистика
-stats = {
-    'total_users': set(),  # Уникальные пользователи
-    'messages_today': 0,   # Сообщения за сегодня
-    'messages_this_week': 0,  # Сообщения за неделю
-    'daily_messages': defaultdict(int),  # По дням
-    'start_time': datetime.now()  # Время запуска бота
+// Запрещенные фразы для удаления сообщений
+const FORBIDDEN_PHRASES = [
+    'го в лс',
+    'в лс',
+    'файлик лс',
+    'файлик в лс',
+    'файлик в личку',
+    'пиши в лс',
+    'напиши в лс',
+    'в личные сообщения',
+    'скинь в личку',
+    'в личку',
+    'кину в личку',
+    'пишите в личку',
+    'вышлю в лс',
+    'скинь лс',
+    'пиши лс',
+    'напиши лс',
+    'скинь в лс'
+];
+
+// Фразы, за которые выдается предупреждение
+const WARNING_PHRASES = [
+    'есть машинка',
+    'скинь машинку',
+    'скину машинку',
+    'го машинку',
+    'го машинка',
+    'лс машинка',
+    'лс машинку',
+    'лс файлик',
+    'лс файл',
+    'машинка лс',
+    'машинку лс',
+    'файлик лс',
+    'файл лс',
+    'го файлик',
+    'скинь файлик',
+    'скинь файл',
+    'скину файлик',
+    'скину файл',
+    'бот дурак',
+    'личка файлик',
+    'личка машинка'
+];
+
+// Фразы, на которые бот отвечает объяснением об удалении
+const DELETION_QUESTION_PHRASES = [
+    'почему удалил',
+    'удаляются сообщения',
+    'удалилось сообщение',
+    'почему удалилось',
+    'мои сообщения удалились',
+    'удалились сообщения',
+    'пропали сообщения',
+    'сообщения пропали',
+    'пропало сообщение',
+    'сообщение пропало',
+    'сообщение удалилось',
+    'удалилось сообщение'
+];
+
+// Функция проверки, содержит ли текст запрещенные фразы
+function containsForbiddenPhrase(text) {
+    const lowerText = text.toLowerCase().trim();
+    
+    // Проверяем на точное совпадение с запрещенными фразами
+    return FORBIDDEN_PHRASES.some(phrase => {
+        const lowerPhrase = phrase.toLowerCase();
+        
+        // Точное совпадение всего сообщения
+        if (lowerText === lowerPhrase) {
+            return true;
+        }
+        
+        // Проверяем, что фраза окружена пробелами, знаками препинания или началом/концом строки
+        const regex = new RegExp(`(^|[\\s.,!?;:()\\[\\]{}"\'-])${lowerPhrase.replace(/[.*+?^${}()|[\]\\]/g, '\\// Функция проверки, содержит ли текст запрещенные фразы
+function containsForbiddenPhrase(text) {
+    const lowerText = text.toLowerCase();
+    
+    // Список фраз, которые могут быть частью безобидных сообщений
+    const safeContexts = [
+        'что я с кем-то',
+        'с кем-то вчера',
+        'с кем-то сегодня',
+        'с кем-то общался',
+        'с кем-то общалась',
+        'с кем-то говорил',
+        'с кем-то говорила',
+        'с кем-то встречался',
+        'с кем-то встречалась',
+        'общалась в личке',
+        'общался в личке',
+        'говорил в личке',
+        'говорила в личке'
+    ];
+    
+    // Если сообщение содержит безопасный контекст, не удаляем его
+    if (safeContexts.some(context => lowerText.includes(context))) {
+        return false;
+    }
+    
+    return FORBIDDEN_PHRASES.some(phrase => lowerText.includes(phrase.toLowerCase()));
+}')}($|[\\s.,!?;:()\\[\\]{}"\'-])`, 'i');
+        return regex.test(lowerText);
+    });
 }
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+// Функция проверки, содержит ли текст фразы для предупреждения
+function containsWarningPhrase(text) {
+    const lowerText = text.toLowerCase();
+    return WARNING_PHRASES.some(phrase => lowerText.includes(phrase.toLowerCase()));
+}
 
-def update_stats(user_id):
-    """Обновляет статистику при новом сообщении"""
-    now = datetime.now()
-    today = now.date()
-    
-    # Добавляем пользователя в уникальные
-    stats['total_users'].add(user_id)
-    
-    # Увеличиваем счетчики
-    stats['daily_messages'][today] += 1
-    
-    # Пересчитываем сегодняшние сообщения
-    stats['messages_today'] = stats['daily_messages'][today]
-    
-    # Пересчитываем сообщения за неделю
-    week_ago = today - timedelta(days=7)
-    stats['messages_this_week'] = sum(
-        count for date, count in stats['daily_messages'].items() 
-        if date >= week_ago
-    )
+// Функция проверки, содержит ли текст вопросы об удалении
+function containsDeletionQuestion(text) {
+    const lowerText = text.toLowerCase();
+    return DELETION_QUESTION_PHRASES.some(phrase => lowerText.includes(phrase.toLowerCase()));
+}
 
-def get_main_keyboard():
-    """Создает основную клавиатуру с кнопками"""
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📤 Отправить данные")],
-            [KeyboardButton(text="📰 Сообщить новость")],
-            [KeyboardButton(text="✍️ Написать админам")]
-        ],
-        resize_keyboard=True,  # Подгоняет размер кнопок
-        one_time_keyboard=False,  # Клавиатура остается после нажатия
-        persistent=True  # Клавиатура всегда видна
-    )
-    return keyboard
+// Функция получения количества предупреждений пользователя
+function getUserWarnings(userId) {
+    return userWarnings.get(userId) || 0;
+}
 
-def get_admin_chat_keyboard():
-    """Создает клавиатуру для режима общения с админами"""
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="❌ Закончить общение")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=False,
-        persistent=True
-    )
-    return keyboard
+// Функция добавления предупреждения
+function addWarning(userId) {
+    const currentWarnings = getUserWarnings(userId);
+    const newWarnings = currentWarnings + 1;
+    userWarnings.set(userId, newWarnings);
+    return newWarnings;
+}
 
-@dp.message(CommandStart())
-async def start_handler(message: types.Message):
-    """Обработчик команды /start"""
-    # Работаем только в личных чатах
-    if message.chat.type != 'private':
-        return
-    
-    # Обновляем статистику
-    update_stats(message.from_user.id)
+// Функция добавления в черный список
+function addToBlackList(userId) {
+    blackList.add(userId);
+}
+
+// Функция проверки, находится ли пользователь в черном списке
+function isInBlackList(userId) {
+    return blackList.has(userId);
+}
+
+// Основной обработчик сообщений
+bot.on('message', async (msg) => {
+    try {
+        const chatId = msg.chat.id;
+        const userId = msg.from.id;
+        const messageId = msg.message_id;
+        const text = msg.text || msg.caption || '';
         
-    await message.answer(
-        "Привет! 👋\n\nВыберите действие:",
-        reply_markup=get_main_keyboard()
-    )
-
-@dp.message(Command('stats'))
-async def stats_handler(message: types.Message):
-    """Обработчик команды /stats - только для админов"""
-    # Проверяем, что это админ (сообщение из админского чата или от админа)
-    is_admin = (
-        str(message.chat.id) == ADMIN_GROUP_ID or  # Сообщение из админской группы
-        str(message.from_user.id) == ADMIN_GROUP_ID.replace('-', '')  # Личное сообщение от админа
-    )
-    
-    if not is_admin:
-        return  # Игнорируем команду от обычных пользователей
-    
-    # Формируем статистику
-    uptime = datetime.now() - stats['start_time']
-    uptime_str = f"{uptime.days} дн. {uptime.seconds // 3600} ч. {(uptime.seconds % 3600) // 60} мин."
-    
-    # Последние 7 дней
-    recent_days = []
-    for i in range(6, -1, -1):  # От 6 дней назад до сегодня
-        day = datetime.now().date() - timedelta(days=i)
-        count = stats['daily_messages'].get(day, 0)
-        day_name = "Сегодня" if i == 0 else f"{day.strftime('%d.%m')}"
-        recent_days.append(f"  {day_name}: {count}")
-    
-    stats_text = f"""📊 **Статистика бота**
-
-👥 **Уникальные пользователи:** {len(stats['total_users'])}
-📨 **Сообщений сегодня:** {stats['messages_today']}
-📈 **Сообщений за неделю:** {stats['messages_this_week']}
-
-📅 **По дням:**
-{chr(10).join(recent_days)}
-
-⏱️ **Время работы:** {uptime_str}
-🚀 **Запущен:** {stats['start_time'].strftime('%d.%m.%Y %H:%M')}"""
-    
-    await message.answer(stats_text, parse_mode='Markdown')
-
-@dp.message(lambda message: message.text == "📤 Отправить данные")
-async def send_file_handler(message: types.Message):
-    """Обработчик кнопки 'Отправить данные'"""
-    # Работаем только в личных чатах
-    if message.chat.type != 'private':
-        return
+        // Дополнительное логирование для диагностики
+        console.log(`[${new Date().toLocaleTimeString()}] Обработка сообщения от ${userId} в чате ${chatId}: "${text.substring(0, 50)}..."`);
         
-    await message.answer(
-        "Чтобы опубликовать ваши новеллы, нам нужна информация.\n\n<b>Заполните 2 формы:</b>\n"
-        "1. Анкету по новеллам: https://tally.so/r/3qQZg2\n"
-        "2. Карточку переводчика: https://tally.so/r/wAexoN\n\n"
-        "Это займет всего пару минут ✨",
-        parse_mode='HTML',
-        disable_web_page_preview=True,
-        reply_markup=get_main_keyboard()
-    )
+        // Проверяем, что это нужная группа (НЕ группа отчетов)
+        if (!MONITORED_GROUPS.includes(chatId.toString())) {
+            return;
+        }
 
-@dp.message(lambda message: message.text == "📰 Сообщить новость")
-async def news_handler(message: types.Message):
-    """Обработчик кнопки 'Сообщить новость'"""
-    # Работаем только в личных чатах
-    if message.chat.type != 'private':
-        return
-        
-    await message.answer(
-        "Здесь вы можете сообщить любую новость. Например, что взяли новый перевод или закончили текущий.\n\n"
-        "Чтобы отправить новость, заполните анкету: https://tally.so/r/wkBjBd",
-        disable_web_page_preview=True,
-        reply_markup=get_main_keyboard()
-    )
+        // Дополнительная проверка: игнорируем группу отчетов
+        if (REPORTS_GROUP_ID && chatId.toString() === REPORTS_GROUP_ID) {
+            return;
+        }
 
-@dp.message(lambda message: message.text == "✍️ Написать админам")
-async def contact_admin_handler(message: types.Message):
-    """Обработчик кнопки 'Написать админам'"""
-    # Работаем только в личных чатах
-    if message.chat.type != 'private':
-        return
-    
-    # Помечаем пользователя как ожидающего ввода сообщения для админов
-    waiting_for_admin_message[message.from_user.id] = True
-    
-    # Обновляем статистику
-    update_stats(message.from_user.id)
-        
-    await message.answer(
-        "💬 Режим общения с админами активирован!\n"
-        "Теперь все ваши сообщения будут пересылаться админам.",
-        reply_markup=get_admin_chat_keyboard()
-    )
+        // Проверяем, что это нужная тема (если указаны темы)
+        if (MONITORED_TOPICS.length > 0 && msg.message_thread_id) {
+            if (!MONITORED_TOPICS.includes(msg.message_thread_id.toString())) {
+                console.log(`Сообщение в неотслеживаемой теме ${msg.message_thread_id}, пропускаем`);
+                return;
+            }
+        } else if (msg.message_thread_id) {
+            // Если темы не заданы, но сообщение в теме - логируем ID темы для настройки
+            console.log(`Сообщение в теме ${msg.message_thread_id}. Для мониторинга добавьте ID в MONITORED_TOPICS`);
+        }
 
-@dp.message(lambda message: message.text == "❌ Закончить общение")
-async def end_admin_chat_handler(message: types.Message):
-    """Обработчик кнопки 'Закончить общение'"""
-    # Работаем только в личных чатах
-    if message.chat.type != 'private':
-        return
-    
-    # Убираем пометку ожидания сообщений для админов
-    waiting_for_admin_message[message.from_user.id] = False
-        
-    await message.answer(
-        "✅ Общение с админами закончено.",
-        reply_markup=get_main_keyboard()
-    )
+        // Проверяем, не является ли пользователь администратором (ПРОСТАЯ проверка)
+        try {
+            const chatMember = await bot.getChatMember(chatId, userId);
+            if (['administrator', 'creator'].includes(chatMember.status)) {
+                return; // Игнорируем сообщения от администраторов
+            }
+        } catch (error) {
+            // Если не удалось проверить статус, продолжаем как с обычным пользователем
+            console.log(`Не удалось проверить статус пользователя ${userId}:`, error.message);
+        }
 
-@dp.message()
-async def message_handler(message: types.Message):
-    """Обработчик всех остальных сообщений"""
-    
-    # Если сообщение из админского чата и это ответ на сообщение бота
-    if str(message.chat.id) == ADMIN_GROUP_ID and message.reply_to_message and message.reply_to_message.from_user.id == bot.id:
-        # Ищем пользователя для ответа
-        original_message_id = message.reply_to_message.message_id
-        target_user_id = admin_message_to_user.get(original_message_id)
-        
-        if target_user_id:
-            try:
-                # Определяем клавиатуру для пользователя
-                keyboard = get_admin_chat_keyboard() if waiting_for_admin_message.get(target_user_id, False) else get_main_keyboard()
+        // Проверяем, не в черном списке ли пользователь
+        if (isInBlackList(userId)) {
+            // Пользователь в черном списке - он уже заглушен, ничего не делаем
+            console.log(`Сообщение от заглушенного пользователя ${userId}: "${text}"`);
+            return;
+        }
+
+        // Проверяем на запрещенные фразы (удаление сообщения)
+        if (containsForbiddenPhrase(text)) {
+            try {
+                await bot.deleteMessage(chatId, messageId);
+                console.log(`Удалено сообщение с запрещенной фразой от пользователя ${userId}: "${text}"`);
+            } catch (error) {
+                console.error('Ошибка при удалении сообщения:', error);
+            }
+            return; // ВАЖНО: выходим здесь, не проверяем на предупреждения
+        }
+
+        // Проверяем на вопросы об удалении сообщений
+        if (containsDeletionQuestion(text)) {
+            // Проверяем, не отправляли ли мы недавно объяснение этому пользователю
+            const lastExplanation = recentExplanations.get(userId);
+            const now = Date.now();
+            
+            // Если прошло меньше 30 секунд с последнего объяснения, не отправляем повторно
+            if (lastExplanation && (now - lastExplanation) < 30000) {
+                console.log(`Пропускаем дублирующее объяснение для пользователя ${userId}`);
+                return;
+            }
+            
+            try {
+                const explanationMessage = 
+                    `✂️ Это я удалил ваше сообщение из-за нарушения правил. Прочитайте их еще раз внимательнее. Если произошла ошибка, напишите админам в бот: @ProPerevod_bot\n[ваш Злой Миша]`;
                 
-                # Отправляем ответ пользователю в зависимости от типа сообщения админа
-                if message.text:
-                    # Текстовое сообщение от админа
-                    await bot.send_message(
-                        chat_id=target_user_id,
-                        text=f"💬 Ответ от админов:\n\n{message.text}",
-                        reply_markup=keyboard
-                    )
-                elif message.sticker:
-                    # Стикер от админа
-                    await bot.send_message(
-                        chat_id=target_user_id,
-                        text="💬 Ответ от админов:",
-                        reply_markup=keyboard
-                    )
-                    await bot.send_sticker(
-                        chat_id=target_user_id,
-                        sticker=message.sticker.file_id
-                    )
-                elif message.animation:
-                    # Гифка от админа
-                    await bot.send_message(
-                        chat_id=target_user_id,
-                        text="💬 Ответ от админов:",
-                        reply_markup=keyboard
-                    )
-                    await bot.send_animation(
-                        chat_id=target_user_id,
-                        animation=message.animation.file_id,
-                        caption=message.caption
-                    )
-                elif message.photo:
-                    # Фото от админа
-                    caption = "💬 Ответ от админов"
-                    if message.caption:
-                        caption += f":\n\n{message.caption}"
-                    await bot.send_photo(
-                        chat_id=target_user_id,
-                        photo=message.photo[-1].file_id,
-                        caption=caption,
-                        reply_markup=keyboard
-                    )
-                elif message.video:
-                    # Видео от админа
-                    caption = "💬 Ответ от админов"
-                    if message.caption:
-                        caption += f":\n\n{message.caption}"
-                    await bot.send_video(
-                        chat_id=target_user_id,
-                        video=message.video.file_id,
-                        caption=caption,
-                        reply_markup=keyboard
-                    )
-                elif message.voice:
-                    # Голосовое от админа
-                    await bot.send_message(
-                        chat_id=target_user_id,
-                        text="💬 Ответ от админов:",
-                        reply_markup=keyboard
-                    )
-                    await bot.send_voice(
-                        chat_id=target_user_id,
-                        voice=message.voice.file_id
-                    )
-                else:
-                    # Другие типы сообщений
-                    await bot.send_message(
-                        chat_id=target_user_id,
-                        text="💬 Админ отправил ответ (неподдерживаемый тип сообщения)",
-                        reply_markup=keyboard
-                    )
+                // Подготавливаем опции для отправки
+                const sendOptions = { reply_to_message_id: messageId };
                 
-                # Подтверждаем админу
-                await message.reply("✅ Ответ отправлен пользователю!")
+                // Если сообщение в подтеме, отвечаем в ту же подтему
+                if (msg.message_thread_id) {
+                    sendOptions.message_thread_id = msg.message_thread_id;
+                }
                 
-                # НЕ удаляем связь - теперь можно отвечать много раз на одно сообщение
-                # del admin_message_to_user[original_message_id]
+                await bot.sendMessage(chatId, explanationMessage, sendOptions);
                 
-            except Exception as e:
-                logging.error(f"Ошибка при отправке ответа пользователю: {e}")
-                await message.reply("❌ Ошибка при отправке ответа.")
-        else:
-            await message.reply("❌ Отвечайте именно на стикер.")
-        return
+                // Запоминаем время отправки объяснения
+                recentExplanations.set(userId, now);
+                
+                console.log(`Отправлено объяснение об удалении пользователю ${userId} в ${new Date().toLocaleTimeString()}`);
+            } catch (error) {
+                console.error('Ошибка при отправке объяснения:', error);
+            }
+            return; // Выходим, не проверяем на предупреждения
+        }
+
+        // Проверяем на фразы для предупреждения
+        if (containsWarningPhrase(text)) {
+            const warnings = addWarning(userId);
+            
+            // Получаем информацию о пользователе
+            const username = msg.from.username ? `@${msg.from.username}` : msg.from.first_name;
+            
+            if (warnings >= 3) {
+                // Добавляем в черный список
+                addToBlackList(userId);
+                
+                // Мьютим пользователя в группе навсегда
+                try {
+                    await bot.restrictChatMember(chatId, userId, {
+                        can_send_messages: false,
+                        can_send_media_messages: false,
+                        can_send_polls: false,
+                        can_send_other_messages: false,
+                        can_add_web_page_previews: false,
+                        can_change_info: false,
+                        can_invite_users: false,
+                        can_pin_messages: false,
+                        until_date: 0 // 0 = навсегда
+                    });
+                    console.log(`Пользователь ${userId} заглушен в группе навсегда`);
+                } catch (muteError) {
+                    console.error('Ошибка при мьюте пользователя:', muteError);
+                    // Если не удалось замьютить, продолжаем с удалением сообщений
+                }
+                
+                // Отправляем сообщение о добавлении в черный список в основную группу
+                try {
+                    const banMessage = `❌ ${username}, вы получили 3 предупреждения и добавлены в черный список. (3/3)\n[ваш Злой Миша]`;
+                    
+                    // Подготавливаем опции для отправки
+                    const sendOptions = {};
+                    
+                    // Если сообщение в подтеме, отвечаем в ту же подтему
+                    if (msg.message_thread_id) {
+                        sendOptions.message_thread_id = msg.message_thread_id;
+                    }
+                    
+                    await bot.sendMessage(chatId, banMessage, sendOptions);
+                } catch (error) {
+                    console.error('Ошибка при отправке сообщения о бане:', error);
+                }
+                
+                // Отправляем отчет в группу отчетов
+                if (REPORTS_GROUP_ID) {
+                    try {
+                        const groupName = msg.chat.title || `группе ${chatId}`;
+                        const userInfo = msg.from.username 
+                            ? `@${msg.from.username} (ID: ${userId})`
+                            : `${msg.from.first_name} (ID: ${userId})`;
+                        
+                        const reportMessage = 
+                            `🚫 НОВЫЙ БАН\n\n` +
+                            `👤 Пользователь: ${userInfo}\n` +
+                            `💬 Группа: ${groupName}\n` +
+                            `📝 Нарушение: "${text}"\n` +
+                            `⚠️ Предупреждений: 3/3\n` +
+                            `🕐 Время: ${new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\n\n` +
+                            `[Злой Миша - отчет о модерации]`;
+                        
+                        await bot.sendMessage(REPORTS_GROUP_ID, reportMessage);
+                        console.log(`Отчет о бане отправлен в группу отчетов: ${userId}`);
+                    } catch (reportError) {
+                        console.error('Ошибка при отправке отчета:', reportError);
+                    }
+                }
+                
+                console.log(`Пользователь ${userId} добавлен в черный список`);
+            } else {
+                // Отправляем предупреждение
+                let warningText;
+                if (warnings === 1) {
+                    warningText = `⚠️ ${username}, по правилам это запрещено. Вам первое предупреждение. (1/3)\n[ваш Злой Миша]`;
+                } else if (warnings === 2) {
+                    warningText = `⚠️ ${username}, по правилам это запрещено. Вам второе предупреждение. Следующее будет последним. (2/3)\n[ваш Злой Миша]`;
+                }
+                
+                // Подготавливаем опции для отправки
+                const sendOptions = { reply_to_message_id: messageId };
+                
+                // Если сообщение в подтеме, отвечаем в ту же подтему
+                if (msg.message_thread_id) {
+                    sendOptions.message_thread_id = msg.message_thread_id;
+                }
+                
+                await bot.sendMessage(chatId, warningText, sendOptions);
+                
+                console.log(`Пользователь ${userId} получил предупреждение ${warnings}/3`);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при обработке сообщения:', error);
+    }
+});
+
+// Команды бота для администраторов
+bot.onText(/\/warnings (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const targetUserId = match[1];
     
-    # Работаем только в личных чатах для обычных пользователей
-    if message.chat.type != 'private':
-        return
+    // Проверяем права администратора
+    try {
+        const chatMember = await bot.getChatMember(chatId, msg.from.id);
+        if (!['administrator', 'creator'].includes(chatMember.status)) {
+            return;
+        }
+    } catch (error) {
+        console.error('Ошибка проверки прав администратора:', error);
+        return;
+    }
     
-    user_id = message.from_user.id
+    // Проверяем, что передан корректный ID
+    const userId = parseInt(targetUserId);
+    if (isNaN(userId)) {
+        await bot.sendMessage(chatId, 'Неверный формат ID пользователя. Используйте: /warnings 123456789');
+        return;
+    }
     
-    # Проверяем, ожидает ли пользователь ввода сообщения для админов
-    if waiting_for_admin_message.get(user_id, False):
-        # НЕ убираем пометку - пользователь остается в режиме общения с админами
+    const warnings = getUserWarnings(userId);
+    const isBlacklisted = isInBlackList(userId);
+    const status = isBlacklisted ? ' (в черном списке)' : '';
+    
+    await bot.sendMessage(chatId, `Пользователь ${userId} имеет ${warnings} предупреждений${status}.`);
+    
+    console.log(`Админ ${msg.from.id} запросил информацию о пользователе ${userId}: ${warnings} предупреждений`);
+});
+
+bot.onText(/\/blacklist/, async (msg) => {
+    const chatId = msg.chat.id;
+    
+    // Проверяем права администратора
+    try {
+        const chatMember = await bot.getChatMember(chatId, msg.from.id);
+        if (!['administrator', 'creator'].includes(chatMember.status)) {
+            return;
+        }
+    } catch (error) {
+        return;
+    }
+    
+    const blackListArray = Array.from(blackList);
+    const message = blackListArray.length > 0 
+        ? `Черный список (${blackListArray.length} пользователей):\n${blackListArray.join('\n')}`
+        : 'Черный список пуст.';
+    
+    await bot.sendMessage(chatId, message);
+});
+
+bot.onText(/\/unban (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = parseInt(match[1]);
+    
+    // Проверяем права администратора
+    try {
+        const chatMember = await bot.getChatMember(chatId, msg.from.id);
+        if (!['administrator', 'creator'].includes(chatMember.status)) {
+            return;
+        }
+    } catch (error) {
+        return;
+    }
+    
+    // Удаляем из черного списка
+    blackList.delete(userId);
+    userWarnings.delete(userId);
+    
+    // Размьючиваем пользователя
+    try {
+        await bot.restrictChatMember(chatId, userId, {
+            can_send_messages: true,
+            can_send_media_messages: true,
+            can_send_polls: true,
+            can_send_other_messages: true,
+            can_add_web_page_previews: true,
+            can_change_info: false,
+            can_invite_users: true,
+            can_pin_messages: false
+        });
+        console.log(`Пользователь ${userId} размьючен`);
         
-        # Пересылаем сообщение админам
-        try:
-            # Формируем сообщение для админов
-            user_info = f"👤 Пользователь: {message.from_user.full_name}"
-            if message.from_user.username:
-                user_info += f" (@{message.from_user.username})"
-            user_info += f"\n🆔 ID: {message.from_user.id}"
-            
-            # Определяем тип сообщения и отправляем соответственно
-            if message.text:
-                # Текстовое сообщение
-                admin_message = f"{user_info}\n\n📝 Сообщение:\n{message.text}"
-                result = await bot.send_message(
-                    chat_id=ADMIN_GROUP_ID,
-                    text=admin_message
-                )
-            elif message.sticker:
-                # Стикер
-                await bot.send_message(
-                    chat_id=ADMIN_GROUP_ID,
-                    text=f"{user_info}\n\n🎭 Отправил стикер:"
-                )
-                result = await bot.send_sticker(
-                    chat_id=ADMIN_GROUP_ID,
-                    sticker=message.sticker.file_id
-                )
-            elif message.animation:
-                # Гифка (анимация)
-                caption = f"{user_info}\n\n🎬 Отправил гифку"
-                if message.caption:
-                    caption += f":\n{message.caption}"
-                result = await bot.send_animation(
-                    chat_id=ADMIN_GROUP_ID,
-                    animation=message.animation.file_id,
-                    caption=caption
-                )
-            else:
-                # Неподдерживаемый тип
-                await message.answer(
-                    "К сожалению, такое сообщение отправить нельзя. Только текст, стикер или гифку.",
-                    reply_markup=get_admin_chat_keyboard()
-                )
-                return  # Выходим, не отправляя админам
-            
-            # Сохраняем связь между сообщением админа и пользователем
-            admin_message_to_user[result.message_id] = user_id
-            
-            logging.info(f"Сообщение отправлено успешно: {result.message_id}")
-            
-            # Подтверждаем отправку пользователю с напоминанием о режиме
-            await message.answer(
-                "✅ Сообщение отправлено админам!\n"
-                "Режим общения активен, можете писать ещё.\n",
-                reply_markup=get_admin_chat_keyboard()
-            )
-            
-        except Exception as e:
-            logging.error(f"Ошибка при отправке сообщения админам: {e}")
-            await message.answer(
-                "❌ Произошла ошибка при отправке сообщения. Попробуйте позже.",
-                reply_markup=get_admin_chat_keyboard()
-            )
-    else:
-        # Обычное сообщение - показываем дружелюбное предложение
-        await message.answer(
-            "Есть вопрос? Нажмите «Написать админам» 👀",
-            reply_markup=get_main_keyboard()
-        )
+        // Отправляем ОДНО сообщение об успешном разбане
+        await bot.sendMessage(chatId, `Пользователь ${userId} удален из черного списка, размьючен и его предупреждения сброшены.`);
+    } catch (unmuteError) {
+        console.error('Ошибка при размьючивании:', unmuteError);
+        // Даже если размьючивание не удалось, отправляем сообщение
+        await bot.sendMessage(chatId, `Пользователь ${userId} удален из черного списка и его предупреждения сброшены.`);
+    }
+});
 
-async def on_startup():
-    """Настройка webhook при запуске"""
-    logging.info(f"Настройка webhook: {WEBHOOK_URL}")
-    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+// Команда приветствия для администраторов
+bot.onText(/\/misha/, async (msg) => {
+    const chatId = msg.chat.id;
+    
+    // НЕ работает в группе отчетов
+    if (REPORTS_GROUP_ID && chatId.toString() === REPORTS_GROUP_ID) {
+        return;
+    }
+    
+    // Проверяем права администратора
+    try {
+        const chatMember = await bot.getChatMember(chatId, msg.from.id);
+        if (!['administrator', 'creator'].includes(chatMember.status)) {
+            console.log(`Пользователь ${msg.from.id} попытался использовать /misha без прав администратора`);
+            return;
+        }
+    } catch (error) {
+        console.error('Ошибка проверки прав администратора для /misha:', error);
+        return;
+    }
+    
+    const greetingMessage = 
+        `Привет! Я — бот Злой Миша. Теперь я буду активно следить за правилами в чатах. Ждите меня, я приду 👹\n[ваш Злой Миша]`;
+    
+    try {
+        // Подготавливаем опции для отправки
+        const sendOptions = {};
+        
+        // Если команда в подтеме, отвечаем в ту же подтему
+        if (msg.message_thread_id) {
+            sendOptions.message_thread_id = msg.message_thread_id;
+        }
+        
+        await bot.sendMessage(chatId, greetingMessage, sendOptions);
+        console.log(`Команда /misha выполнена администратором ${msg.from.id} в чате ${chatId}`);
+    } catch (error) {
+        console.error('Ошибка при отправке приветствия:', error);
+    }
+});
 
-async def on_shutdown():
-    """Очистка при завершении"""
-    logging.info("Удаление webhook...")
-    await bot.delete_webhook()
-    await bot.session.close()
+// Обработка ошибок бота
+bot.on('error', (error) => {
+    console.error('Ошибка бота:', error);
+});
 
-async def health_check(request):
-    """Health check endpoint для мониторинга"""
-    return web.Response(text="Bot is running!")
+bot.on('polling_error', (error) => {
+    console.error('Ошибка polling:', error);
+});
 
-def main():
-    """Основная функция запуска приложения"""
-    
-    # Создаем веб-приложение
-    app = Application()
-    
-    # Добавляем health check
-    app.router.add_get('/', health_check)
-    app.router.add_get('/health', health_check)
-    
-    # Настраиваем webhook handler
-    webhook_requests_handler = SimpleRequestHandler(
-        dispatcher=dp,
-        bot=bot,
-    )
-    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-    
-    # Настраиваем приложение
-    setup_application(app, dp, bot=bot)
-    
-    # Добавляем обработчики запуска и завершения
-    app.on_startup.append(lambda app: asyncio.create_task(on_startup()))
-    app.on_shutdown.append(lambda app: asyncio.create_task(on_shutdown()))
-    
-    # Запускаем веб-сервер
-    port = int(os.getenv('PORT', 10000))
-    logging.info(f"Запуск сервера на порту {port}")
-    web.run_app(app, host='0.0.0.0', port=port)
+// Express маршруты для Render.com
+app.get('/', (req, res) => {
+    res.json({
+        status: 'Bot is running',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
 
-if __name__ == '__main__':
-    main()
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        bot_running: true,
+        warnings_count: userWarnings.size,
+        blacklist_count: blackList.size
+    });
+});
+
+app.get('/stats', (req, res) => {
+    res.json({
+        total_warnings_issued: Array.from(userWarnings.values()).reduce((sum, count) => sum + count, 0),
+        users_with_warnings: userWarnings.size,
+        blacklisted_users: blackList.size,
+        monitored_groups: MONITORED_GROUPS.length,
+        monitored_topics: MONITORED_TOPICS.length
+    });
+});
+
+// Запуск сервера
+app.listen(PORT, () => {
+    console.log(`Сервер запущен на порту ${PORT}`);
+    console.log('Бот запущен и готов к работе');
+    console.log(`Мониторим группы: ${MONITORED_GROUPS.join(', ')}`);
+    console.log(`Мониторим темы: ${MONITORED_TOPICS.join(', ')}`);
+    console.log(`Группа отчетов: ${REPORTS_GROUP_ID || 'не настроена'}`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+    console.log('Получен сигнал SIGINT, завершаем работу...');
+    bot.stopPolling();
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('Получен сигнал SIGTERM, завершаем работу...');
+    bot.stopPolling();
+    process.exit(0);
+});
