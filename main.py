@@ -16,7 +16,10 @@ logging.basicConfig(level=logging.INFO)
 # Получаем переменные окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID')
-WEBHOOK_HOST = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
+PUBLIC_URL = os.getenv('PUBLIC_URL')
+if not PUBLIC_URL:
+    raise ValueError("PUBLIC_URL не найден в переменных окружения! Укажи https://<name>.koyeb.app")
+WEBHOOK_HOST = PUBLIC_URL.rstrip('/')
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
 
