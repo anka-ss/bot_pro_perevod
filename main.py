@@ -16,9 +16,12 @@ logging.basicConfig(level=logging.INFO)
 # Получаем переменные окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_GROUP_ID = os.getenv('ADMIN_GROUP_ID')
-PUBLIC_URL = os.getenv('PUBLIC_URL')
+
+# Поддерживаем и Koyeb (PUBLIC_URL) и Render (RENDER_EXTERNAL_URL)
+PUBLIC_URL = os.getenv('PUBLIC_URL') or os.getenv('RENDER_EXTERNAL_URL')
 if not PUBLIC_URL:
-    raise ValueError("PUBLIC_URL не найден в переменных окружения! Укажи https://<name>.koyeb.app")
+    raise ValueError("PUBLIC_URL или RENDER_EXTERNAL_URL не найден в переменных окружения!")
+
 WEBHOOK_HOST = PUBLIC_URL.rstrip('/')
 WEBHOOK_PATH = f'/webhook/{BOT_TOKEN}'
 WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
@@ -395,12 +398,20 @@ async def message_handler(message: types.Message):
 async def on_startup():
     """Настройка webhook при запуске"""
     logging.info(f"Настройка webhook: {WEBHOOK_URL}")
-    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+    try:
+        await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+        logging.info("✅ Webhook установлен успешно!")
+    except Exception as e:
+        logging.error(f"❌ Ошибка при установке webhook: {e}")
 
 async def on_shutdown():
     """Очистка при завершении"""
     logging.info("Удаление webhook...")
-    await bot.delete_webhook()
+    try:
+        await bot.delete_webhook()
+        logging.info("✅ Webhook удален успешно!")
+    except Exception as e:
+        logging.error(f"❌ Ошибка при удалении webhook: {e}")
     await bot.session.close()
 
 async def health_check(request):
@@ -409,6 +420,10 @@ async def health_check(request):
 
 def main():
     """Основная функция запуска приложения"""
+    
+    logging.info(f"🚀 Запуск бота...")
+    logging.info(f"🌐 PUBLIC_URL: {PUBLIC_URL}")
+    logging.info(f"🔗 WEBHOOK_URL: {WEBHOOK_URL}")
     
     # Создаем веб-приложение
     app = Application()
@@ -432,8 +447,8 @@ def main():
     app.on_shutdown.append(lambda app: asyncio.create_task(on_shutdown()))
     
     # Запускаем веб-сервер
-    port = int(os.getenv('PORT', 10000))
-    logging.info(f"Запуск сервера на порту {port}")
+    port = int(os.getenv('PORT', 8000))  # Koyeb обычно использует порт 8000
+    logging.info(f"🔌 Запуск сервера на порту {port}")
     web.run_app(app, host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
